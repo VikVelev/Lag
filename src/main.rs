@@ -37,17 +37,20 @@ fn uniformly_random_index(dim: i32, num_vectors: usize) -> Vec<Vector> {
 }
 
 fn main() {
-    let references = uniformly_random_index(8, 10);
-    let query = uniformly_random_vector(8, rng());
+    let references = uniformly_random_index(32, 10000);
+    let query = uniformly_random_vector(32, rng());
 
     let engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
     engine.build();
 
     let results = engine.search(&query, 5);
-    
+
     println!("{:?}", references);
     println!("Seaching");
     println!("{:?}", results);
+    println!(
+        "Top K scores: {:?}",
+        results.iter().map(|x| x.score).collect::<Vec<f32>>()
+    );
     println!("Best Score {:?}", results[0].score);
-
 }

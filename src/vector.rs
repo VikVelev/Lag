@@ -8,6 +8,10 @@ pub fn l1_norm(vec_a: &Vector, vec_b: &Vector) -> f32 {
     panic!()
 }
 
+pub fn cosine(vec_a: &Vector, vec_b: &Vector) -> f32 {
+    return dot(vec_a, vec_b) / (magnitude(vec_a) * magnitude(vec_b));
+}
+
 fn magnitude(vec: &Vector) -> f32 {
     let mut sum_of_squares = 0.0f32;
     for el in vec {
@@ -23,8 +27,4 @@ fn dot(vec_a: &Vector, vec_b: &Vector) -> f32 {
         result += vec_a[i] * vec_b[i];
     }
     return result;
-}
-
-pub fn cosine(vec_a: &Vector, vec_b: &Vector) -> f32 {
-    return dot(vec_a, vec_b) / (magnitude(vec_a) * magnitude(vec_b));
 }
