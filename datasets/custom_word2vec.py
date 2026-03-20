@@ -335,7 +335,7 @@ if __name__ == "__main__":
     corpus_sentences = load_and_preprocess_corpus("word2vec.train")
     if corpus_sentences:
         embedder = SimpleWord2VecEmbedder(
-            vector_size=50, window=6, min_count=2, epochs=100
+            vector_size=64, window=6, min_count=2, epochs=100
         )
         embedder.train(corpus_sentences)
 
