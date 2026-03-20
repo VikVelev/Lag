@@ -1,2 +1,5 @@
 /target
 /datasets/word2vec.train
+/datasets/exports/custom_word2vec/*
+/datasets/exports/pretrained_word2vec/*
+/datasets/exports/simple_count_vectorizer/*
