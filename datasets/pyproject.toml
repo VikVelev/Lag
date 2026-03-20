@@ -7,8 +7,8 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "gensim @ git+https://github.com/piskvorky/gensim.git"
 ]
-
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

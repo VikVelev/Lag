@@ -339,9 +339,9 @@ if __name__ == "__main__":
         )
         embedder.train(corpus_sentences)
 
-        embedder.save_model("models/space_word2vec.pkl")
-        embedder.export_to_csv("exports/space_embeddings.csv")
-        embedder.export_vocab_to_csv("exports/space_vocab.csv")
+        embedder.save_model("models/custom_word2vec.pkl")
+        embedder.export_to_csv("exports/custom_word2vec/embeddings.csv")
+        embedder.export_vocab_to_csv("exports/custom_word2vec/vocab.csv")
 
         for word in ["planet", "gravity", "star", "trade", "astronomers"]:
             similar = embedder.get_similar_words(word, topn=3)

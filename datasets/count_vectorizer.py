@@ -33,7 +33,7 @@ if __name__ == "__main__":
     print("Embeddings:\n", embeddings)
 
     # Save to CSV
-    with open("embeddings.csv", "w", newline="") as f:
+    with open("exports/simple_count_vectorizer.csv", "w", newline="") as f:
         writer = csv.writer(f)
         # Write header
         writer.writerow(["sentence"] + [f"dim_{i}" for i in range(embeddings.shape[1])])
