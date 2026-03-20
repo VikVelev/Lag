@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 import csv
 
+
 class LocalWordEmbedder:
     def __init__(self, vocab=None):
         self.vectorizer = CountVectorizer(vocabulary=vocab)
@@ -19,14 +20,29 @@ class LocalWordEmbedder:
 def generate_dataset(N, embedder, texts=None):
     if texts is None:
         # Generate N random sentences
-        words = ["cat", "dog", "fish", "bird", "apple", "car", "tree", "house", "book", "phone"]
-        texts = [" ".join(np.random.choice(words, size=np.random.randint(3, 7))) for _ in range(N)]
+        words = [
+            "cat",
+            "dog",
+            "fish",
+            "bird",
+            "apple",
+            "car",
+            "tree",
+            "house",
+            "book",
+            "phone",
+        ]
+        texts = [
+            " ".join(np.random.choice(words, size=np.random.randint(3, 7)))
+            for _ in range(N)
+        ]
     embeddings = embedder.fit_transform(texts)
     return embeddings, texts
 
+
 # Example usage:
 if __name__ == "__main__":
-    N = 1000 # Number of embedding vectors
+    N = 1000  # Number of embedding vectors
     embedder = LocalWordEmbedder()
     embeddings, sentences = generate_dataset(N, embedder)
     print("Sentences:", sentences)

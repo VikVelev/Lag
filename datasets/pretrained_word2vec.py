@@ -143,20 +143,21 @@ def test():
     print(f"Result: {analogy[0][0]} ({analogy[0][1]:.4f})")
 
 
+def export_in_chunks(
+    model_name: str = "word2vec-google-news-300",
+    output_dir: str = "exports/google_news_chunks",
+    chunk_size: int = 100000,
+):
 
-def export_in_chunks(model_name: str = "word2vec-google-news-300", 
-                     output_dir: str = "exports/google_news_chunks", 
-                     chunk_size: int = 100000):
-    
     print(f"Loading '{model_name}'... (Grab a coffee, this takes a minute or two)")
     model = api.load(model_name)
-    
+
     # Create the dedicated folder for our chunks
     os.makedirs(output_dir, exist_ok=True)
-        
+
     vector_size = model.vector_size
     total_words = len(model.index_to_key)
-    
+
     print(f"Model loaded. Total vocabulary: {total_words:,} words")
     print(f"Exporting in chunks of {chunk_size:,}...")
 
@@ -166,32 +167,35 @@ def export_in_chunks(model_name: str = "word2vec-google-news-300",
     for chunk_idx in range(num_chunks):
         start_idx = chunk_idx * chunk_size
         end_idx = min(start_idx + chunk_size, total_words)
-        
+
         # Name the file neatly: e.g., chunk_001_0_to_100000.csv
         filename = f"chunk_{chunk_idx + 1:03d}_{start_idx}_to_{end_idx}.csv"
         filepath = os.path.join(output_dir, filename)
-        
+
         print(f"Writing {filename}...")
-        
-        with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+
+        with open(filepath, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
-            
+
             # Write the header
-            header = ['word'] + [f'dim_{i}' for i in range(vector_size)]
+            header = ["word"] + [f"dim_{i}" for i in range(vector_size)]
             writer.writerow(header)
-            
+
             # Write the rows specifically for this chunk
             for i in range(start_idx, end_idx):
                 word = model.index_to_key[i]
                 vector = model[word]
                 writer.writerow([word] + vector.tolist())
-                
-    print("\nSuccess! All 3 million words have been safely exported into bite-sized CSVs.")
+
+    print(
+        "\nSuccess! All 3 million words have been safely exported into bite-sized CSVs."
+    )
+
 
 if __name__ == "__main__":
     # Run the chunker!
     export_in_chunks(
-        model_name="word2vec-google-news-300", 
-        output_dir="exports/google_news_chunks", 
-        chunk_size=100000 
+        model_name="word2vec-google-news-300",
+        output_dir="exports/google_news_chunks",
+        chunk_size=100000,
     )
