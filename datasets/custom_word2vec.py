@@ -4,12 +4,12 @@ import os
 import pickle
 import csv
 from collections import defaultdict
-import random
+import re
 
 class SimpleWord2VecEmbedder:
     """
-    A simplified word2vec implementation using skip-gram with negative sampling.
-    More stable than Gensim for certain environments.
+    A simplified Word2Vec implementation using skip-gram with negative sampling.
+    Refactored for mathematical stability, memory safety, and unigram sampling.
     """
 
     def __init__(self, vector_size: int = 100, window: int = 5, min_count: int = 1,
@@ -25,13 +25,19 @@ class SimpleWord2VecEmbedder:
         self.idx_to_word = {}
         self.word_freq = defaultdict(int)
         self.vocab_size = 0
+        self.sampling_probs = None # Unigram distribution
 
         # Initialize weight matrices
         self.W1 = None  # Input to hidden
         self.W2 = None  # Hidden to output
 
     def _build_vocab(self, sentences: List[List[str]]) -> None:
-        """Build vocabulary from sentences."""
+        """Build vocabulary and unigram distribution from sentences."""
+        # Reset state in case of retraining
+        self.word_freq.clear()
+        self.word_to_idx.clear()
+        self.idx_to_word.clear()
+        
         for sentence in sentences:
             for word in sentence:
                 self.word_freq[word] += 1
@@ -42,6 +48,12 @@ class SimpleWord2VecEmbedder:
         self.word_to_idx = {word: i for i, word in enumerate(vocab.keys())}
         self.idx_to_word = {i: word for word, i in self.word_to_idx.items()}
         self.vocab_size = len(self.word_to_idx)
+        
+        if self.vocab_size > 0:
+            # Build Unigram Distribution (freq ^ 0.75) for Negative Sampling
+            freqs = np.array([vocab[self.idx_to_word[i]] for i in range(self.vocab_size)])
+            pow_freqs = freqs ** 0.75
+            self.sampling_probs = pow_freqs / np.sum(pow_freqs)
 
         print(f"Vocabulary built: {self.vocab_size} words")
 
@@ -53,17 +65,32 @@ class SimpleWord2VecEmbedder:
                                    (self.vector_size, self.vocab_size))
 
     def _get_negative_samples(self, target_idx: int) -> List[int]:
-        """Get negative samples for training."""
+        """Get negative samples using the unigram distribution."""
+        if self.vocab_size <= 1:
+            return []
+
         negatives = []
-        while len(negatives) < self.negative_samples:
-            neg = random.randint(0, self.vocab_size - 1)
+        # Oversample slightly to account for collisions with target_idx
+        raw_samples = np.random.choice(self.vocab_size, size=self.negative_samples + 2, p=self.sampling_probs)
+        
+        for neg in raw_samples:
             if neg != target_idx:
                 negatives.append(neg)
+            if len(negatives) == self.negative_samples:
+                break
+                
+        # Fallback if we still need more
+        while len(negatives) < self.negative_samples:
+            neg = np.random.choice(self.vocab_size, p=self.sampling_probs)
+            if neg != target_idx:
+                negatives.append(int(neg))
+                
         return negatives
 
     def _sigmoid(self, x: float) -> float:
-        """Sigmoid activation function."""
-        return 1 / (1 + np.exp(-x))
+        """Sigmoid activation function with overflow protection."""
+        x = np.clip(x, -500, 500) # Prevent RuntimeWarning
+        return 1.0 / (1.0 + np.exp(-x))
 
     def _train_pair(self, input_idx: int, output_idx: int, is_positive: bool) -> float:
         """Train a single input-output pair."""
@@ -79,9 +106,13 @@ class SimpleWord2VecEmbedder:
         # Backward pass
         error = prediction - target
 
-        # Update weights
-        self.W2[:, output_idx] -= self.learning_rate * error * hidden
-        self.W1[input_idx] -= self.learning_rate * error * output
+        # Calculate gradients FIRST to avoid mutating views
+        grad_W2 = self.learning_rate * error * hidden
+        grad_W1 = self.learning_rate * error * output
+
+        # Apply updates
+        self.W2[:, output_idx] -= grad_W2
+        self.W1[input_idx] -= grad_W1
 
         return loss
 
@@ -90,8 +121,8 @@ class SimpleWord2VecEmbedder:
         print("Building vocabulary...")
         self._build_vocab(sentences)
 
-        if self.vocab_size == 0:
-            raise ValueError("No words found in vocabulary after filtering")
+        if self.vocab_size <= 1:
+            raise ValueError("Not enough words found in vocabulary after filtering (need at least 2).")
 
         print("Initializing weights...")
         self._initialize_weights()
@@ -106,16 +137,14 @@ class SimpleWord2VecEmbedder:
             pairs_count = 0
 
             for sentence in sentences:
-                # Convert words to indices, skip unknown words
                 indices = [self.word_to_idx[word] for word in sentence if word in self.word_to_idx]
 
                 for i, center_idx in enumerate(indices):
-                    # Define context window
                     start = max(0, i - self.window)
                     end = min(len(indices), i + self.window + 1)
 
                     for j in range(start, end):
-                        if i != j:  # Skip center word
+                        if i != j:  
                             context_idx = indices[j]
 
                             # Positive sample
@@ -156,25 +185,24 @@ class SimpleWord2VecEmbedder:
         for other_word, idx in self.word_to_idx.items():
             if other_word != word:
                 other_vec = self.W1[idx]
-                # Cosine similarity
                 dot_product = np.dot(target_vec, other_vec)
                 norm_a = np.linalg.norm(target_vec)
                 norm_b = np.linalg.norm(other_vec)
                 similarity = dot_product / (norm_a * norm_b) if norm_a > 0 and norm_b > 0 else 0
                 similarities.append((other_word, similarity))
 
-        # Sort by similarity (descending)
         similarities.sort(key=lambda x: x[1], reverse=True)
         return similarities[:topn]
 
     def save_model(self, filepath: str) -> None:
-        """Save model to file."""
+        """Save model to file safely."""
         model_data = {
             'word_to_idx': self.word_to_idx,
             'idx_to_word': self.idx_to_word,
             'word_freq': dict(self.word_freq),
             'vocab_size': self.vocab_size,
             'vector_size': self.vector_size,
+            'sampling_probs': self.sampling_probs,
             'W1': self.W1,
             'W2': self.W2,
             'config': {
@@ -186,7 +214,10 @@ class SimpleWord2VecEmbedder:
             }
         }
 
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        directory = os.path.dirname(filepath)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+            
         with open(filepath, 'wb') as f:
             pickle.dump(model_data, f)
         print(f"Model saved to {filepath}")
@@ -201,6 +232,7 @@ class SimpleWord2VecEmbedder:
         self.word_freq = defaultdict(int, model_data['word_freq'])
         self.vocab_size = model_data['vocab_size']
         self.vector_size = model_data['vector_size']
+        self.sampling_probs = model_data.get('sampling_probs')
         self.W1 = model_data['W1']
         self.W2 = model_data['W2']
 
@@ -220,16 +252,15 @@ class SimpleWord2VecEmbedder:
 
         print(f"Exporting {len(words)} embeddings to {output_path}")
 
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        directory = os.path.dirname(output_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
 
         with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
-
-            # Write header
             header = ['word'] + [f'dim_{i}' for i in range(self.vector_size)]
             writer.writerow(header)
 
-            # Write embeddings
             exported_count = 0
             for word in words:
                 embedding = self.get_embedding(word)
@@ -241,48 +272,62 @@ class SimpleWord2VecEmbedder:
         print(f"Successfully exported {exported_count} embeddings")
 
     def export_vocab_to_csv(self, output_path: str) -> None:
-        """Export vocabulary with frequencies."""
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        """Export strictly the filtered vocabulary with frequencies."""
+        directory = os.path.dirname(output_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
 
         with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(['word', 'frequency'])
 
-            for word, freq in sorted(self.word_freq.items(), key=lambda x: x[1], reverse=True):
-                writer.writerow([word, freq])
+            # Only export words that survived min_count filtering
+            for word in self.word_to_idx.keys():
+                writer.writerow([word, self.word_freq[word]])
 
         print(f"Vocabulary exported to {output_path}")
 
+def load_and_preprocess_corpus(filepath: str) -> List[List[str]]:
+    """Reads a text file and tokenizes it into a list of sentences (lists of words)."""
+    sentences = []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            text = f.read()
+        raw_sentences = re.split(r'[.!?]+', text)
+        for raw_sentence in raw_sentences:
+            clean_sentence = re.sub(r'[^\w\s]', '', raw_sentence.lower())
+            words = clean_sentence.split()
+            if words:
+                sentences.append(words)
+        print(f"Loaded {len(sentences)} sentences from '{filepath}'.")
+        return sentences
+    except FileNotFoundError:
+        print(f"Error: Could not find '{filepath}'.")
+        return []
 
-# Simple tokenizer
-def simple_tokenizer(text: str) -> List[str]:
-    """Simple whitespace-based tokenizer."""
-    return text.lower().split()
-
-
-# Example usage
+# Example usage/testing block
 if __name__ == "__main__":
-    # Create embedder
-    embedder = SimpleWord2VecEmbedder(vector_size=50, window=3, min_count=1, epochs=10)
+    # Make sure you have a 'word2vec.train' file in the same directory, 
+    # or replace this with a list of sample sentences to test immediately.
+    corpus_sentences = load_and_preprocess_corpus("word2vec.train")
 
-    # Sample training data
-    sentences = [
-        ["the", "cat", "sat", "on", "the", "mat"],
-        ["the", "dog", "ran", "in", "the", "park"],
-        ["cats", "and", "dogs", "are", "pets"],
-        ["machine", "learning", "is", "powerful"],
-        ["word", "embeddings", "represent", "meaning"]
-    ]
-
-    # Train
-    embedder.train(sentences)
-
-    # Export
-    embedder.export_to_csv("datasets/embeddings.csv")
-    embedder.export_vocab_to_csv("datasets/vocabulary.csv")
-
-    # Test
-    similar = embedder.get_similar_words("cat", topn=3)
-    print(f"Words similar to 'cat': {similar}")
-
-    print("Training completed!")
+    if corpus_sentences:
+        embedder = SimpleWord2VecEmbedder(vector_size=50, window=6, min_count=2, epochs=500)
+        
+        # Train
+        embedder.train(corpus_sentences)
+        
+        # Export and Save
+        embedder.save_model("models/space_word2vec.pkl")
+        embedder.export_to_csv("exports/space_embeddings.csv")
+        embedder.export_vocab_to_csv("exports/space_vocab.csv")
+        
+        # Test similarities
+        test_words = ["planet", "gravity", "star", "trade", "astronomers"]
+        for word in test_words:
+            similar = embedder.get_similar_words(word, topn=3)
+            print(f"\nWords similar to '{word}':")
+            for w, score in similar:
+                print(f"  - {w} ({score:.4f})")
+    else:
+        print("No training data found. Create 'word2vec.train' to run the full pipeline.")
