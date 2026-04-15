@@ -1,6 +1,8 @@
 mod engine;
 mod vector;
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use rand::{
     rng,
     rngs::{self},
@@ -41,13 +43,16 @@ fn main() {
     let query = uniformly_random_vector(32, rng());
 
     let engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
-    engine.build();
+    println!("{:?}", references);
+    println!("Searching");
+    let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
+    engine.build();
     let results = engine.search(&query, 5);
 
-    println!("{:?}", references);
-    println!("Seaching");
+    let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     println!("{:?}", results);
+    println!("Final time taken {:?}", end - start);
     println!(
         "Top K scores: {:?}",
         results.iter().map(|x| x.score).collect::<Vec<f32>>()
