@@ -6,6 +6,11 @@ pub enum Distance {
     Cosine,
 }
 
+pub enum CentroidComputerType {
+    KMeans,
+    // TODO: Add more
+}
+
 impl Distance {
     pub fn compute(&self, vec_a: &Vector, vec_b: &Vector) -> f32 {
         match self {

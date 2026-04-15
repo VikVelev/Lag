@@ -12,7 +12,10 @@ use rand_distr::{Distribution, StandardNormal};
 use engine::bruteforce::BruteForceEngine;
 use engine::engine::{CandidateScore, Distance, VSEngine};
 
-use crate::vector::Vector;
+use crate::{
+    engine::asymmetric::{AssymetricConfig, AssymetricHashingEngine},
+    vector::Vector,
+};
 
 fn uniformly_random_vector(dim: i32, mut rng: rngs::ThreadRng) -> Vector {
     let mut vec: Vector = (0..dim).map(|_| StandardNormal.sample(&mut rng)).collect();
@@ -38,21 +41,45 @@ fn uniformly_random_index(dim: i32, num_vectors: usize) -> Vec<Vector> {
     return index;
 }
 
+fn time_now() -> std::time::Duration {
+    return SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+}
+
 fn main() {
-    let references = uniformly_random_index(32, 10000);
-    let query = uniformly_random_vector(32, rng());
+    let vector_dims: i32 = 64;
+    let references = uniformly_random_index(vector_dims, 1_000_000);
+    let query = uniformly_random_vector(vector_dims, rng());
 
-    let engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
-    println!("{:?}", references);
-    println!("Searching");
-    let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    // let engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
 
+    let assymetric_config = AssymetricConfig {
+        distance: Distance::Cosine,
+        num_centroids: 255u8,
+        centroid_computer: engine::engine::CentroidComputerType::KMeans,
+        vector_size: vector_dims,
+        subvector_size: 4i32,
+    };
+    let engine: AssymetricHashingEngine =
+        AssymetricHashingEngine::new(&references, assymetric_config);
+
+    println!("Building Index...");
+    let index_build_start_ts = time_now();
     engine.build();
-    let results = engine.search(&query, 5);
+    let index_build_end_ts = time_now();
+    println!(
+        "Index building time taken: {:?}",
+        index_build_end_ts - index_build_start_ts
+    );
 
-    let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    // println!("{:?}", references);
+    println!("Searching...");
+    let search_start = time_now();
+
+    let results = engine.search(&query, 10);
+
+    let search_end = time_now();
     println!("{:?}", results);
-    println!("Final time taken {:?}", end - start);
+    println!("Final time taken: {:?}", search_end - search_start);
     println!(
         "Top K scores: {:?}",
         results.iter().map(|x| x.score).collect::<Vec<f32>>()
