@@ -1,9 +1,7 @@
-#![feature(portable_simd)]
-
 mod engine;
 mod vector;
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{env, time::{SystemTime, UNIX_EPOCH}};
 
 use rand::{
     rng,
@@ -47,9 +45,9 @@ fn time_now() -> std::time::Duration {
     return SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 }
 
-fn main() {
+fn main_asymmetric() {
     let vector_dims: i32 = 64;
-    let references = uniformly_random_index(vector_dims, 1_000_0);
+    let references = uniformly_random_index(vector_dims, 1_000_00);
     let query = uniformly_random_vector(vector_dims, rng());
 
     // let engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
@@ -76,15 +74,64 @@ fn main() {
     // println!("{:?}", references);
     println!("Searching...");
     let search_start = time_now();
-
-    let results = engine.search(&query, 10);
+    
+    for i in 0..10000 {
+        let query = uniformly_random_vector(vector_dims, rng());
+        let results = engine.search(&query, 5);
+    }
 
     let search_end = time_now();
-    println!("{:?}", results);
-    println!("Final time taken: {:?}", search_end - search_start);
+    // println!("{:?}", results);
+    println!("Search time taken: {:?}", search_end - search_start);
+    // println!(
+    //     "Top K scores: {:?}",
+    //     results.iter().map(|x| x.score).collect::<Vec<f32>>()
+    // );
+    // println!("Best Score {:?}", results[0].score);
+}
+
+
+fn main_bruteforce() {
+    let vector_dims: i32 = 64;
+    let references = uniformly_random_index(vector_dims, 1_000_00);
+    let query = uniformly_random_vector(vector_dims, rng());
+
+    let mut engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
+
+    println!("Building Index...");
+    let index_build_start_ts = time_now();
+    engine.build();
+    let index_build_end_ts = time_now();
     println!(
-        "Top K scores: {:?}",
-        results.iter().map(|x| x.score).collect::<Vec<f32>>()
+        "Index building time taken: {:?}",
+        index_build_end_ts - index_build_start_ts
     );
-    println!("Best Score {:?}", results[0].score);
+
+    // println!("{:?}", references);
+    println!("Searching...");
+    let search_start = time_now();
+    
+    for _ in 0..10000 {
+        let query = uniformly_random_vector(vector_dims, rng());
+        engine.search(&query, 5);
+    }
+
+    let search_end = time_now();
+    // println!("{:?}", results);
+    println!("Search time taken: {:?}", search_end - search_start);
+    // println!(
+    //     "Top K scores: {:?}",
+    //     results.iter().map(|x| x.score).collect::<Vec<f32>>()
+    // );
+    // println!("Best Score {:?}", results[0].score);
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    if args.contains(&String::from("-a")) {
+        main_asymmetric();
+    } else if args.contains(&String::from("-b")) {
+        main_bruteforce();
+    }
 }

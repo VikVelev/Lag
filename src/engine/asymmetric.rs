@@ -26,8 +26,6 @@ pub struct AsymmetricHashingEngine<'a> {
     // for every sub-vector, all learned centroids
     codebooks: Vec<Vec<Vector>>,
     hashed_references: Vec<HashedVector>,
-    // for every sub-vector, distances to all centroids
-    lut: Vec<Vec<f32>>,
 }
 
 impl<'a> AsymmetricHashingEngine<'a> {
@@ -36,14 +34,12 @@ impl<'a> AsymmetricHashingEngine<'a> {
         config: AsymmetricConfig,
     ) -> AsymmetricHashingEngine<'a> {
         let codebooks = Vec::<Vec<Vector>>::new();
-        let lut = Vec::<Vec<f32>>::new();
         let hashed_references = Vec::<HashedVector>::new();
 
         return AsymmetricHashingEngine {
             references,
             config,
             codebooks,
-            lut,
             hashed_references,
         };
     }
@@ -108,11 +104,7 @@ impl<'a> AsymmetricHashingEngine<'a> {
                 })
                 .collect();
 
-            // Create a codebook for each
             self.codebooks.push(centroids);
-
-            // Get the current split -> find the closest centroid and compress it into a hash
-            // todo!()
         }
 
         println!(
@@ -135,14 +127,31 @@ impl<'a> AsymmetricHashingEngine<'a> {
 
         return idx;
     }
+
+    fn create_lut(&self, query: &Vector) -> Vec<Vec<f32>> {
+        let mut lut = Vec::<Vec<f32>>::new();
+        let num_subvectors = self.config.vector_size / self.config.subvector_size;
+
+        for i in 0..num_subvectors {
+            let start = (i * self.config.subvector_size) as usize;
+            let end = ((i + 1) * self.config.subvector_size) as usize;
+            let subvec = query[start..end].to_vec();
+
+            let mut distances = vec![0f32; self.config.num_centroids.into()];
+            for (cidx, centroid) in self.codebooks[i as usize].iter().enumerate() {
+                distances[cidx] = self.config.distance.compute(&subvec, centroid);
+            }
+            lut.push(distances);
+        }
+
+        return lut;
+    }
 }
 
 impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
     fn build(&mut self) {
         println!("Starting build process...");
 
-        // --- ADDED: Log original size ---
-        // Calculates capacity * size_of<T> for inner vectors + the overhead of the Vec structs themselves
         let ref_bytes = (self.references.capacity() * std::mem::size_of::<Vec<f32>>())
             + self
                 .references
@@ -155,7 +164,6 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             ref_bytes as f64 / 1_048_576.0,
             self.references.len()
         );
-        // --------------------------------
 
         self.build_codebook();
 
@@ -210,21 +218,24 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
     // Compute a Look-up table
     // Use it to go over the compressed references
     fn search(&self, query: &Vector, top_k: usize) -> Vec<CandidateScore> {
-        let mut scores: Vec<CandidateScore> = self
-            .references
-            .iter()
-            .map(|reference| CandidateScore {
-                candidate: reference.to_vec(),
-                score: self.config.distance.compute(query, reference),
-            })
-            .collect();
+        // Compute query look-up table
+        let lut = self.create_lut(query);
 
-        scores.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        let mut candidates: Vec<CandidateScore> = Vec::new();
+        for (idx, vec) in self.hashed_references.iter().enumerate() {
+            let mut current_distance = 0f32;
+            for (subspace, centroid_idx) in vec.into_iter().enumerate() {
+                current_distance += lut[subspace][*centroid_idx];
+            }
+            candidates.push(CandidateScore {
+                index: idx,
+                candidate: self.references[idx].clone(),
+                score: current_distance,
+            });
+        }
 
-        return scores.into_iter().take(top_k).collect();
+        candidates.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+
+        return candidates.into_iter().take(top_k).collect();
     }
 }

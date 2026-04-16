@@ -35,6 +35,7 @@ impl<'a> VSEngine for BruteForceEngine<'a> {
             .references
             .iter()
             .map(|reference| CandidateScore {
+                index: 0,
                 candidate: reference.to_vec(),
                 score: self.distance.compute(query, reference),
             })
