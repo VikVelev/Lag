@@ -27,26 +27,36 @@ impl<'a> VSEngine for BruteForceEngine<'a> {
         panic!();
     }
 
-    // The dummest algorithm possible:
+    // Almost the dummest algorithm possible:
     // Compute distance to each vector - store them in an array
     // Compute cut-off and get the top_k
+    // Top_k is actually O(n + klogk) with select_nth_unstable
     fn search(&self, query: &Vector, top_k: usize) -> Vec<CandidateScore> {
-        let mut scores: Vec<CandidateScore> = self
+        // Handle edge case where top_k is 0 or greater than our reference count
+        if top_k == 0 || self.references.is_empty() {
+            return vec![];
+        }
+        let k = std::cmp::min(top_k, self.references.len());
+
+        let mut scores: Vec<(usize, f32)> = self
             .references
             .iter()
-            .map(|reference| CandidateScore {
-                index: 0,
-                candidate: reference.to_vec(),
-                score: self.distance.compute(query, reference),
-            })
+            .enumerate()
+            .map(|(idx, reference)| (idx, self.distance.compute(query, reference)))
             .collect();
 
-        scores.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+        let (top_k_slice, _, _) = scores.select_nth_unstable_by(k - 1, |a, b| {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        return scores.into_iter().take(top_k).collect();
+        top_k_slice.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        top_k_slice
+            .iter()
+            .map(|&(idx, score)| CandidateScore {
+                index: idx,
+                score,
+            })
+            .collect()
     }
 }

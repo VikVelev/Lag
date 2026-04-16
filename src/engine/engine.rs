@@ -24,7 +24,7 @@ impl Distance {
 #[derive(Debug)]
 pub struct CandidateScore {
     pub index: usize,
-    pub candidate: Vector,
+    // pub candidate: Vector,
     pub score: f32,
 }
 

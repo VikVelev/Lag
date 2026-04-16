@@ -217,25 +217,39 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
     // Assymetric Search
     // Compute a Look-up table
     // Use it to go over the compressed references
+    // Top_k is actually O(n + klogk) with select_nth_unstable
     fn search(&self, query: &Vector, top_k: usize) -> Vec<CandidateScore> {
-        // Compute query look-up table
+        if top_k == 0 || self.hashed_references.is_empty() {
+            return vec![];
+        }
+        let k = std::cmp::min(top_k, self.hashed_references.len());
+
         let lut = self.create_lut(query);
 
-        let mut candidates: Vec<CandidateScore> = Vec::new();
-        for (idx, vec) in self.hashed_references.iter().enumerate() {
-            let mut current_distance = 0f32;
-            for (subspace, centroid_idx) in vec.into_iter().enumerate() {
-                current_distance += lut[subspace][*centroid_idx];
-            }
-            candidates.push(CandidateScore {
+        let mut scores: Vec<(usize, f32)> = self
+            .hashed_references
+            .iter()
+            .enumerate()
+            .map(|(idx, vec)| {
+                let mut current_distance = 0f32;
+                for (subspace, centroid_idx) in vec.iter().enumerate() {
+                    current_distance += lut[subspace][*centroid_idx];
+                }
+                (idx, current_distance)
+            })
+            .collect();
+
+        let (top_k_slice, _, _) = scores.select_nth_unstable_by(k - 1, |a, b| {
+            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        top_k_slice.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        top_k_slice
+            .iter()
+            .map(|&(idx, score)| CandidateScore {
                 index: idx,
-                candidate: self.references[idx].clone(),
-                score: current_distance,
-            });
-        }
-
-        candidates.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
-
-        return candidates.into_iter().take(top_k).collect();
+                score,
+            })
+            .collect()
     }
 }
