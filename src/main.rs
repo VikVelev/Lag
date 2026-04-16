@@ -50,14 +50,14 @@ fn time_now() -> std::time::Duration {
 
 fn main_asymmetric() {
     let vector_dims: i32 = 64;
-    let references = uniformly_random_index(vector_dims, 1_000_00);
+    let references = uniformly_random_index(vector_dims, 1_000_000);
 
     let assymetric_config = AsymmetricConfig {
         distance: Distance::Cosine,
         num_centroids: 255,
         centroid_computer: engine::engine::CentroidComputerType::KMeans,
         vector_size: vector_dims,
-        subvector_size: 4i32,
+        subvector_size: 4,
     };
     let mut engine: AsymmetricHashingEngine =
         AsymmetricHashingEngine::new(&references, assymetric_config);
@@ -85,7 +85,7 @@ fn main_asymmetric() {
 
 fn main_bruteforce() {
     let vector_dims: i32 = 64;
-    let references = uniformly_random_index(vector_dims, 1_000_00);
+    let references = uniformly_random_index(vector_dims, 1_000_000);
 
     let mut engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
 
@@ -113,7 +113,7 @@ fn main_bruteforce() {
 fn quality_eval() {
     let vector_dims: i32 = 64;
     let top_k = 5;
-    let references = uniformly_random_index(vector_dims, 1_000_00);
+    let references = uniformly_random_index(vector_dims, 100_000);
 
     let assymetric_config = AsymmetricConfig {
         distance: Distance::DotProductRaw,

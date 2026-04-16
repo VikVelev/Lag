@@ -43,7 +43,6 @@ impl<'a> AsymmetricHashingEngine<'a> {
     }
 
     fn build_codebook(&mut self) {
-
         // Other codebook centroid computers are not implemented yet
         if !matches!(self.config.centroid_computer, CentroidComputerType::KMeans) {
             panic!();
@@ -118,11 +117,11 @@ impl<'a> AsymmetricHashingEngine<'a> {
         );
     }
 
-    fn find_codebook_index(&mut self, vec: Vector, subspace: usize) -> usize {
+    fn find_codebook_index(&self, vec: &[f32], subspace: usize) -> usize {
         let mut idx: usize = std::usize::MAX;
         let mut best_score = std::f32::MAX;
 
-        for (eid, centroid) in self.codebooks[subspace].clone().into_iter().enumerate() {
+        for (eid, centroid) in self.codebooks[subspace].iter().enumerate() {
             // FORCE squared Euclidean distance for vector quantization
             // This guarantees we pick the centroid that accurately matches
             // both the direction AND the magnitude of the subvector.
@@ -141,20 +140,19 @@ impl<'a> AsymmetricHashingEngine<'a> {
         return idx;
     }
 
-    fn create_lut(&self, query: &Vector) -> Vec<Vec<f32>> {
-        let mut lut = Vec::<Vec<f32>>::new();
-        let num_subvectors = self.config.vector_size / self.config.subvector_size;
+    fn create_lut(&self, query: &Vector) -> Vec<f32> {
+        let num_subvectors = (self.config.vector_size / self.config.subvector_size) as usize;
+        // Even though the lut is a matrix, keep it flattened so memory slices fit nicely within cachelines
+        let mut lut = Vec::with_capacity(num_subvectors * self.config.num_centroids);
 
         for i in 0..num_subvectors {
-            let start = (i * self.config.subvector_size) as usize;
-            let end = ((i + 1) * self.config.subvector_size) as usize;
-            let subvec = query[start..end].to_vec();
+            let start = i * self.config.subvector_size as usize;
+            let end = (i + 1) * self.config.subvector_size as usize;
+            let subvec = &query[start..end];
 
-            let mut distances = vec![0f32; self.config.num_centroids.into()];
-            for (cidx, centroid) in self.codebooks[i as usize].iter().enumerate() {
-                distances[cidx] = self.config.distance.compute(&subvec, centroid);
+            for centroid in self.codebooks[i].iter() {
+                lut.push(self.config.distance.compute(subvec, centroid));
             }
-            lut.push(distances);
         }
 
         return lut;
@@ -194,7 +192,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
                 let start = (i * self.config.subvector_size) as usize;
                 let end = ((i + 1) * self.config.subvector_size) as usize;
                 let closest_centroid_idx =
-                    self.find_codebook_index(vec[start..end].to_vec(), i.try_into().unwrap());
+                    self.find_codebook_index(&vec[start..end], i.try_into().unwrap());
                 hashed_vector[i as usize] = closest_centroid_idx;
             }
             self.hashed_references.push(hashed_vector);
@@ -238,6 +236,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
         let k = std::cmp::min(top_k, self.hashed_references.len());
 
         let lut = self.create_lut(query);
+        let num_centroids = self.config.num_centroids;
 
         let mut scores: Vec<(usize, f32)> = self
             .hashed_references
@@ -246,7 +245,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             .map(|(idx, vec)| {
                 let mut current_score = 0f32;
                 for (subspace, centroid_idx) in vec.iter().enumerate() {
-                    current_score += lut[subspace][*centroid_idx];
+                    current_score += lut[subspace * num_centroids + *centroid_idx];
                 }
                 (idx, current_score)
             })

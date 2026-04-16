@@ -13,7 +13,7 @@ pub enum CentroidComputerType {
 }
 
 impl Distance {
-    pub fn compute(&self, vec_a: &Vector, vec_b: &Vector) -> f32 {
+    pub fn compute(&self, vec_a: &[f32], vec_b: &[f32]) -> f32 {
         match self {
             Distance::L2Norm => l2_norm(vec_a, vec_b),
             Distance::L1Norm => l1_norm(vec_a, vec_b),
