@@ -72,12 +72,12 @@ fn main_asymmetric() {
     );
 
     println!("Searching...");
+    let queries: Vec<Vector> = (0..10000)
+        .map(|_| uniformly_random_vector(vector_dims, rng()))
+        .collect();
     let search_start = time_now();
 
-    for _ in 0..10000 {
-        let query = uniformly_random_vector(vector_dims, rng());
-        engine.search(&query, 5);
-    }
+    engine.search_batch(&queries, 5);
 
     let search_end = time_now();
     println!("Search time taken: {:?}", search_end - search_start);
@@ -99,12 +99,12 @@ fn main_bruteforce() {
     );
 
     println!("Searching...");
+    let queries: Vec<Vector> = (0..10000)
+        .map(|_| uniformly_random_vector(vector_dims, rng()))
+        .collect();
     let search_start = time_now();
 
-    for _ in 0..10000 {
-        let query = uniformly_random_vector(vector_dims, rng());
-        engine.search(&query, 5);
-    }
+    engine.search_batch(&queries, 5);
 
     let search_end = time_now();
     println!("Search time taken: {:?}", search_end - search_start);
@@ -143,22 +143,28 @@ fn quality_eval() {
     );
 
     println!("Searching...");
+    let queries: Vec<Vector> = (0..100)
+        .map(|_| uniformly_random_vector(vector_dims, rng()))
+        .collect();
+
     let search_start = time_now();
+    let batch_ah_results = engine.search_batch(&queries, top_k);
+    let batch_bf_results = brute_force_engine.search_batch(&queries, top_k);
+    let search_end = time_now();
 
-    for _ in 0..100 {
-        let query = uniformly_random_vector(vector_dims, rng());
-        let ah_results = engine.search(&query, top_k);
-        let bf_results = brute_force_engine.search(&query, top_k);
-
+    for (q_idx, (ah_results, bf_results)) in batch_ah_results
+        .into_iter()
+        .zip(batch_bf_results)
+        .enumerate()
+    {
+        println!("Query #{}:", q_idx);
         for (top_i, (a, b)) in ah_results.into_iter().zip(bf_results).enumerate() {
             println!(
-                "#{} AH result: {:?} \n#{} BF result: {:?}\n",
+                "  #{} AH result: {:?} \n  #{} BF result: {:?}\n",
                 top_i, a, top_i, b
             );
         }
     }
-
-    let search_end = time_now();
     println!("Search time taken: {:?}", search_end - search_start);
 }
 
