@@ -46,9 +46,9 @@ impl<'a> AsymmetricHashingEngine<'a> {
         // A storage for each # subvector - an array of subvectors
         let mut temp_subvector_split = Vec::<Vec<Vec<f32>>>::new();
         let num_subvectors = self.config.vector_size / self.config.subvector_size;
-        let kmeans_iter = 500;
+        let kmeans_iter = 400;
 
-        for i in 0..num_subvectors {
+        for _ in 0..num_subvectors {
             temp_subvector_split.push(Vec::<Vec<f32>>::new());
         }
 
@@ -113,28 +113,20 @@ impl<'a> AsymmetricHashingEngine<'a> {
     }
 
     fn find_codebook_index(&mut self, vec: Vector, subspace: usize) -> usize {
-        let is_similarity = match self.config.distance {
-            Distance::DotProductRaw | Distance::Cosine => true,
-            Distance::L2Norm | Distance::L1Norm => false,
-        };
-
         let mut idx: usize = std::usize::MAX;
-        let mut best_score = if is_similarity {
-            std::f32::MIN
-        } else {
-            std::f32::MAX
-        };
+        let mut best_score = std::f32::MAX;
 
         for (eid, centroid) in self.codebooks[subspace].clone().into_iter().enumerate() {
-            let current_score = self.config.distance.compute(&vec, &centroid);
+            // FORCE squared Euclidean distance for vector quantization
+            // This guarantees we pick the centroid that accurately matches
+            // both the direction AND the magnitude of the subvector.
+            let mut current_score = 0f32;
+            for (v_val, c_val) in vec.iter().zip(centroid.iter()) {
+                let diff = v_val - c_val;
+                current_score += diff * diff;
+            }
 
-            let is_better = if is_similarity {
-                current_score > best_score
-            } else {
-                current_score < best_score
-            };
-
-            if is_better {
+            if current_score < best_score {
                 best_score = current_score;
                 idx = eid;
             }
