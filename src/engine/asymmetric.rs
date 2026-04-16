@@ -52,7 +52,7 @@ impl<'a> AsymmetricHashingEngine<'a> {
         // A storage for each # subvector - an array of subvectors
         let mut temp_subvector_split = Vec::<Vec<Vec<f32>>>::new();
         let num_subvectors = self.config.vector_size / self.config.subvector_size;
-        let kmeans_iter = 400;
+        let kmeans_iter = 300;
 
         for _ in 0..num_subvectors {
             temp_subvector_split.push(Vec::<Vec<f32>>::new());
