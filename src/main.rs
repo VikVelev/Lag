@@ -159,7 +159,6 @@ fn quality_eval() {
     }
 
     let search_end = time_now();
-    // println!("{:?}", results);
     println!("Search time taken: {:?}", search_end - search_start);
 }
 
