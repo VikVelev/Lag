@@ -1,3 +1,5 @@
+#![feature(portable_simd)]
+
 mod engine;
 mod vector;
 
@@ -13,7 +15,7 @@ use engine::bruteforce::BruteForceEngine;
 use engine::engine::{CandidateScore, Distance, VSEngine};
 
 use crate::{
-    engine::asymmetric::{AssymetricConfig, AssymetricHashingEngine},
+    engine::asymmetric::{AsymmetricConfig, AsymmetricHashingEngine},
     vector::Vector,
 };
 
@@ -47,20 +49,20 @@ fn time_now() -> std::time::Duration {
 
 fn main() {
     let vector_dims: i32 = 64;
-    let references = uniformly_random_index(vector_dims, 1_000_000);
+    let references = uniformly_random_index(vector_dims, 1_000_0);
     let query = uniformly_random_vector(vector_dims, rng());
 
     // let engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
 
-    let assymetric_config = AssymetricConfig {
+    let assymetric_config = AsymmetricConfig {
         distance: Distance::Cosine,
         num_centroids: 255u8,
         centroid_computer: engine::engine::CentroidComputerType::KMeans,
         vector_size: vector_dims,
         subvector_size: 4i32,
     };
-    let engine: AssymetricHashingEngine =
-        AssymetricHashingEngine::new(&references, assymetric_config);
+    let mut engine: AsymmetricHashingEngine =
+        AsymmetricHashingEngine::new(&references, assymetric_config);
 
     println!("Building Index...");
     let index_build_start_ts = time_now();

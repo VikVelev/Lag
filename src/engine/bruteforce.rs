@@ -18,7 +18,7 @@ impl<'a> BruteForceEngine<'a> {
 }
 
 impl<'a> VSEngine for BruteForceEngine<'a> {
-    fn build(&self) {
+    fn build(&mut self) {
         // No-op for BruteForceEngine, as references are set at construction.
     }
 

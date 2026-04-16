@@ -28,7 +28,7 @@ pub struct CandidateScore {
 }
 
 pub trait VSEngine {
-    fn build(&self);
+    fn build(&mut self);
     fn amend(&self, vec: Vector);
     fn search(&self, query: &Vector, top_k: usize) -> Vec<CandidateScore>;
 }

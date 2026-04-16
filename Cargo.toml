@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+kmeans = "2.0.2"
 num-traits = "0.2.19"
 rand = "0.10.0"
 rand_distr = "0.6.0"
