@@ -37,6 +37,6 @@ pub trait VSEngine: Sync {
     fn search(&self, query: &Vector, top_k: usize) -> Vec<CandidateScore>;
     
     fn search_batch(&self, queries: &[Vector], top_k: usize) -> Vec<Vec<CandidateScore>> {
-        queries.par_iter().map(|q| self.search(q, top_k)).collect()
+        queries.iter().map(|q| self.search(q, top_k)).collect()
     }
 }
