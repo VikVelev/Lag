@@ -2,7 +2,7 @@ use num_traits::{Num, ToPrimitive};
 
 pub type Vector = Vec<f32>;
 
-pub type HashedVector = Vec<u8>;
+pub type HashedVector = Vec<usize>;
 
 pub fn l2_norm<T: ToPrimitive, U: ToPrimitive>(vec_a: &[T], vec_b: &[U]) -> f32 {
     assert_eq!(vec_a.len(), vec_b.len(), "Vectors must be the same length");

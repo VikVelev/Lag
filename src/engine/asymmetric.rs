@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use kmeans::{EuclideanDistance, KMeans, KMeansConfig};
 
 use crate::{
@@ -49,12 +47,8 @@ impl<'a> AsymmetricHashingEngine<'a> {
             hashed_references,
         };
     }
-}
 
-impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
-    fn build(&mut self) {
-        println!("Starting build process...");
-
+    fn build_codebook(&mut self) {
         // A storage for each # subvector - an array of subvectors
         let mut temp_subvector_split = Vec::<Vec<Vec<f32>>>::new();
         let num_subvectors = self.config.vector_size / self.config.subvector_size;
@@ -124,6 +118,86 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
         println!(
             "Successfully built {} codebooks. Proceeding to compression...",
             self.codebooks.len()
+        );
+    }
+
+    fn find_codebook_index(&mut self, vec: Vector, subspace: usize) -> usize {
+        let mut idx: usize = std::usize::MAX;
+        let mut distance = std::f32::MAX;
+
+        for (eid, centroid) in self.codebooks[subspace].clone().into_iter().enumerate() {
+            let current_distance = self.config.distance.compute(&vec, &centroid);
+            if current_distance < distance {
+                distance = current_distance;
+                idx = eid;
+            }
+        }
+
+        return idx;
+    }
+}
+
+impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
+    fn build(&mut self) {
+        println!("Starting build process...");
+
+        // --- ADDED: Log original size ---
+        // Calculates capacity * size_of<T> for inner vectors + the overhead of the Vec structs themselves
+        let ref_bytes = (self.references.capacity() * std::mem::size_of::<Vec<f32>>())
+            + self
+                .references
+                .iter()
+                .map(|v| v.capacity() * std::mem::size_of::<f32>())
+                .sum::<usize>();
+
+        println!(
+            "Original references size: ~{:.2} MB ({} vectors)",
+            ref_bytes as f64 / 1_048_576.0,
+            self.references.len()
+        );
+        // --------------------------------
+
+        self.build_codebook();
+
+        let num_subvectors = self.config.vector_size / self.config.subvector_size;
+
+        println!("Hashing Vectors...");
+        for (idx, vec) in self.references.iter().enumerate() {
+            if idx % 100000 == 0 && idx > 0 {
+                println!("  Processed {}/{} vectors", idx, self.references.len());
+            }
+
+            let mut hashed_vector = vec![0; num_subvectors as usize];
+
+            for i in 0..num_subvectors {
+                let start = (i * self.config.subvector_size) as usize;
+                let end = ((i + 1) * self.config.subvector_size) as usize;
+                let closest_centroid_idx =
+                    self.find_codebook_index(vec[start..end].to_vec(), i.try_into().unwrap());
+                hashed_vector[i as usize] = closest_centroid_idx;
+            }
+            self.hashed_references.push(hashed_vector);
+        }
+
+        let hashed_bytes = (self.hashed_references.capacity() * std::mem::size_of::<Vec<usize>>())
+            + self
+                .hashed_references
+                .iter()
+                .map(|v| v.capacity() * std::mem::size_of::<usize>())
+                .sum::<usize>();
+
+        println!(
+            "Full references size: ~{:.2} MB",
+            ref_bytes as f64 / 1_048_576.0
+        );
+
+        println!(
+            "Hashed references size: ~{:.2} MB",
+            hashed_bytes as f64 / 1_048_576.0
+        );
+        println!(
+            "Memory reduction: {:.2}x smaller",
+            ref_bytes as f64 / hashed_bytes as f64
         );
     }
 
