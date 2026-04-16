@@ -10,7 +10,7 @@ pub struct AsymmetricConfig {
     pub distance: Distance,
 
     // number of centroids
-    pub num_centroids: u8,
+    pub num_centroids: usize,
     // how do we compute centroids in the codebook
     pub centroid_computer: CentroidComputerType,
 
@@ -87,7 +87,7 @@ impl<'a> AsymmetricHashingEngine<'a> {
                 EuclideanDistance,
             );
 
-            let max_iter = 1;
+            let max_iter = 100000;
             let result = kmeans.kmeans_lloyd(
                 self.config.num_centroids.into(),
                 max_iter,
@@ -240,7 +240,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             .collect();
 
         let (top_k_slice, _, _) = scores.select_nth_unstable_by(k - 1, |a, b| {
-            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
         });
 
         top_k_slice.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));

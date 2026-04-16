@@ -1,8 +1,9 @@
-use crate::vector::{Vector, cosine, l1_norm, l2_norm};
+use crate::vector::{Vector, cosine, l1_norm, l2_norm, dot};
 
 pub enum Distance {
     L2Norm,
     L1Norm,
+    DotProductRaw,
     Cosine,
 }
 
@@ -17,6 +18,7 @@ impl Distance {
             Distance::L2Norm => l2_norm(vec_a, vec_b),
             Distance::L1Norm => l1_norm(vec_a, vec_b),
             Distance::Cosine => cosine(vec_a, vec_b),
+            Distance::DotProductRaw => dot(vec_a, vec_b),
         }
     }
 }

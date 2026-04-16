@@ -37,7 +37,7 @@ pub fn cosine<T: Num + Copy + ToPrimitive>(vec_a: &[T], vec_b: &[T]) -> f32 {
     return dot(vec_a, vec_b) / (magnitude(vec_a) * magnitude(vec_b));
 }
 
-fn magnitude<T: Num + Copy + ToPrimitive>(vec: &[T]) -> f32 {
+pub fn magnitude<T: Num + Copy + ToPrimitive>(vec: &[T]) -> f32 {
     let mut sum_of_squares = 0.0f32;
 
     for &el in vec {
@@ -49,7 +49,7 @@ fn magnitude<T: Num + Copy + ToPrimitive>(vec: &[T]) -> f32 {
     sum_of_squares.sqrt()
 }
 
-fn dot<T: Num + ToPrimitive, U: Num + ToPrimitive>(a: &[T], b: &[U]) -> f32 {
+pub fn dot<T: Num + ToPrimitive, U: Num + ToPrimitive>(a: &[T], b: &[U]) -> f32 {
     // Basic safety check for vector operations
     if a.len() != b.len() {
         return 0.0; // Or handle as an Error/Panic
