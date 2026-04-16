@@ -186,23 +186,23 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
                 println!("  Processed {}/{} vectors", idx, self.references.len());
             }
 
-            let mut hashed_vector = vec![0; num_subvectors as usize];
+            let mut hashed_vector = vec![0u8; num_subvectors as usize];
 
             for i in 0..num_subvectors {
                 let start = (i * self.config.subvector_size) as usize;
                 let end = ((i + 1) * self.config.subvector_size) as usize;
                 let closest_centroid_idx =
                     self.find_codebook_index(&vec[start..end], i.try_into().unwrap());
-                hashed_vector[i as usize] = closest_centroid_idx;
+                hashed_vector[i as usize] = closest_centroid_idx as u8;
             }
             self.hashed_references.push(hashed_vector);
         }
 
-        let hashed_bytes = (self.hashed_references.capacity() * std::mem::size_of::<Vec<usize>>())
+        let hashed_bytes = (self.hashed_references.capacity() * std::mem::size_of::<Vec<u8>>())
             + self
                 .hashed_references
                 .iter()
-                .map(|v| v.capacity() * std::mem::size_of::<usize>())
+                .map(|v| v.capacity() * std::mem::size_of::<u8>())
                 .sum::<usize>();
 
         println!(
@@ -245,7 +245,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             .map(|(idx, vec)| {
                 let mut current_score = 0f32;
                 for (subspace, centroid_idx) in vec.iter().enumerate() {
-                    current_score += lut[subspace * num_centroids + *centroid_idx];
+                    current_score += lut[subspace * num_centroids + (*centroid_idx as usize)];
                 }
                 (idx, current_score)
             })
