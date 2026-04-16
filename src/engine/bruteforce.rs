@@ -32,7 +32,6 @@ impl<'a> VSEngine for BruteForceEngine<'a> {
     // Compute cut-off and get the top_k
     // Top_k is actually O(n + klogk) with select_nth_unstable
     fn search(&self, query: &Vector, top_k: usize) -> Vec<CandidateScore> {
-        // Handle edge case where top_k is 0 or greater than our reference count
         if top_k == 0 || self.references.is_empty() {
             return vec![];
         }
@@ -45,18 +44,30 @@ impl<'a> VSEngine for BruteForceEngine<'a> {
             .map(|(idx, reference)| (idx, self.distance.compute(query, reference)))
             .collect();
 
+        let is_similarity = match self.distance {
+            Distance::DotProductRaw | Distance::Cosine => true,
+            Distance::L2Norm | Distance::L1Norm => false,
+        };
+
         let (top_k_slice, _, _) = scores.select_nth_unstable_by(k - 1, |a, b| {
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+            if is_similarity {
+                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+            } else {
+                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+            }
         });
 
-        top_k_slice.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        top_k_slice.sort_by(|a, b| {
+            if is_similarity {
+                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+            } else {
+                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+            }
+        });
 
         top_k_slice
             .iter()
-            .map(|&(idx, score)| CandidateScore {
-                index: idx,
-                score,
-            })
+            .map(|&(idx, score)| CandidateScore { index: idx, score })
             .collect()
     }
 }

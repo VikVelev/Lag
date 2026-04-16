@@ -137,10 +137,10 @@ fn quality_eval() {
 
     let assymetric_config = AsymmetricConfig {
         distance: Distance::DotProductRaw,
-        num_centroids: 255,
+        num_centroids: 1024,
         centroid_computer: engine::engine::CentroidComputerType::KMeans,
         vector_size: vector_dims,
-        subvector_size: 4i32,
+        subvector_size: 2,
     };
     let mut engine: AsymmetricHashingEngine =
         AsymmetricHashingEngine::new(&references, assymetric_config);
