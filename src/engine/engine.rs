@@ -1,4 +1,5 @@
 use crate::vector::{Vector, cosine, l1_norm, l2_norm, dot};
+use rayon::prelude::*;
 
 pub enum Distance {
     L2Norm,
@@ -30,8 +31,12 @@ pub struct CandidateScore {
     pub score: f32,
 }
 
-pub trait VSEngine {
+pub trait VSEngine: Sync {
     fn build(&mut self);
     fn amend(&self, vec: Vector);
     fn search(&self, query: &Vector, top_k: usize) -> Vec<CandidateScore>;
+    
+    fn search_batch(&self, queries: &[Vector], top_k: usize) -> Vec<Vec<CandidateScore>> {
+        queries.par_iter().map(|q| self.search(q, top_k)).collect()
+    }
 }

@@ -2,7 +2,6 @@ use crate::{
     engine::engine::{CandidateScore, Distance, VSEngine},
     vector::Vector,
 };
-use rayon::prelude::*;
 
 pub struct BruteForceEngine<'a> {
     references: &'a Vec<Vector>,
@@ -40,7 +39,7 @@ impl<'a> VSEngine for BruteForceEngine<'a> {
 
         let mut scores: Vec<(usize, f32)> = self
             .references
-            .par_iter()
+            .iter()
             .enumerate()
             .map(|(idx, reference)| (idx, self.distance.compute(query, reference)))
             .collect();

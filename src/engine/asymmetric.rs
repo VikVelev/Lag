@@ -2,7 +2,6 @@ use crate::{
     engine::engine::{CandidateScore, CentroidComputerType, Distance, VSEngine},
     vector::{HashedVector, Vector},
 };
-use rayon::prelude::*;
 
 pub struct AsymmetricConfig {
     // type of distance
@@ -241,7 +240,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
 
         let mut scores: Vec<(usize, f32)> = self
             .hashed_references
-            .par_iter()
+            .iter()
             .enumerate()
             .map(|(idx, vec)| {
                 let mut current_score = 0f32;
