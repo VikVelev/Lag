@@ -2,7 +2,8 @@ mod engine;
 mod vector;
 
 use std::{
-    env, iter::Zip, time::{SystemTime, UNIX_EPOCH}
+    env,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use rand::{
@@ -12,7 +13,7 @@ use rand::{
 use rand_distr::{Distribution, StandardNormal};
 
 use engine::bruteforce::BruteForceEngine;
-use engine::engine::{CandidateScore, Distance, VSEngine};
+use engine::engine::{Distance, VSEngine};
 
 use crate::{
     engine::asymmetric::{AsymmetricConfig, AsymmetricHashingEngine},
@@ -50,9 +51,6 @@ fn time_now() -> std::time::Duration {
 fn main_asymmetric() {
     let vector_dims: i32 = 64;
     let references = uniformly_random_index(vector_dims, 1_000_00);
-    let query = uniformly_random_vector(vector_dims, rng());
-
-    // let engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
 
     let assymetric_config = AsymmetricConfig {
         distance: Distance::Cosine,
@@ -73,29 +71,21 @@ fn main_asymmetric() {
         index_build_end_ts - index_build_start_ts
     );
 
-    // println!("{:?}", references);
     println!("Searching...");
     let search_start = time_now();
 
-    for i in 0..10000 {
+    for _ in 0..10000 {
         let query = uniformly_random_vector(vector_dims, rng());
-        let results = engine.search(&query, 5);
+        engine.search(&query, 5);
     }
 
     let search_end = time_now();
-    // println!("{:?}", results);
     println!("Search time taken: {:?}", search_end - search_start);
-    // println!(
-    //     "Top K scores: {:?}",
-    //     results.iter().map(|x| x.score).collect::<Vec<f32>>()
-    // );
-    // println!("Best Score {:?}", results[0].score);
 }
 
 fn main_bruteforce() {
     let vector_dims: i32 = 64;
     let references = uniformly_random_index(vector_dims, 1_000_00);
-    let query = uniformly_random_vector(vector_dims, rng());
 
     let mut engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
 
@@ -108,7 +98,6 @@ fn main_bruteforce() {
         index_build_end_ts - index_build_start_ts
     );
 
-    // println!("{:?}", references);
     println!("Searching...");
     let search_start = time_now();
 
@@ -118,22 +107,13 @@ fn main_bruteforce() {
     }
 
     let search_end = time_now();
-    // println!("{:?}", results);
     println!("Search time taken: {:?}", search_end - search_start);
-    // println!(
-    //     "Top K scores: {:?}",
-    //     results.iter().map(|x| x.score).collect::<Vec<f32>>()
-    // );
-    // println!("Best Score {:?}", results[0].score);
 }
 
 fn quality_eval() {
     let vector_dims: i32 = 64;
     let top_k = 5;
     let references = uniformly_random_index(vector_dims, 1_000_00);
-    let query = uniformly_random_vector(vector_dims, rng());
-
-    // let engine: BruteForceEngine = BruteForceEngine::new(&references, Distance::Cosine);
 
     let assymetric_config = AsymmetricConfig {
         distance: Distance::DotProductRaw,
@@ -171,7 +151,10 @@ fn quality_eval() {
         let bf_results = brute_force_engine.search(&query, top_k);
 
         for (top_i, (a, b)) in ah_results.into_iter().zip(bf_results).enumerate() {
-            println!("#{} AH result: {:?} \n#{} BF result: {:?}\n", top_i, a, top_i, b);
+            println!(
+                "#{} AH result: {:?} \n#{} BF result: {:?}\n",
+                top_i, a, top_i, b
+            );
         }
     }
 

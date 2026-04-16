@@ -22,7 +22,7 @@ impl<'a> VSEngine for BruteForceEngine<'a> {
         // No-op for BruteForceEngine, as references are set at construction.
     }
 
-    fn amend(&self, vec: Vector) {
+    fn amend(&self, _vec: Vector) {
         // TODO: Implement
         panic!();
     }

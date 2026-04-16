@@ -43,6 +43,12 @@ impl<'a> AsymmetricHashingEngine<'a> {
     }
 
     fn build_codebook(&mut self) {
+
+        // Other codebook centroid computers are not implemented yet
+        if !matches!(self.config.centroid_computer, CentroidComputerType::KMeans) {
+            panic!();
+        }
+
         // A storage for each # subvector - an array of subvectors
         let mut temp_subvector_split = Vec::<Vec<Vec<f32>>>::new();
         let num_subvectors = self.config.vector_size / self.config.subvector_size;
@@ -217,7 +223,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
     }
 
     // TODO: Implement
-    fn amend(&self, vec: Vector) {
+    fn amend(&self, _vec: Vector) {
         panic!();
     }
 
