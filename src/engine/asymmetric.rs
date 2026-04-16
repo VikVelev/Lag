@@ -1,5 +1,3 @@
-use kmeans::{EuclideanDistance, KMeans, KMeansConfig};
-
 use crate::{
     engine::engine::{CandidateScore, CentroidComputerType, Distance, VSEngine},
     vector::{HashedVector, Vector},
@@ -48,6 +46,7 @@ impl<'a> AsymmetricHashingEngine<'a> {
         // A storage for each # subvector - an array of subvectors
         let mut temp_subvector_split = Vec::<Vec<Vec<f32>>>::new();
         let num_subvectors = self.config.vector_size / self.config.subvector_size;
+        let kmeans_iter = 100;
 
         for i in 0..num_subvectors {
             temp_subvector_split.push(Vec::<Vec<f32>>::new());
@@ -79,29 +78,29 @@ impl<'a> AsymmetricHashingEngine<'a> {
         for (i, split) in temp_subvector_split.into_iter().enumerate() {
             println!("  Training codebook {}/{}...", i + 1, num_subvectors);
 
-            // Run KMeans for each set of subvectors
-            let kmeans: KMeans<f32, 8, _> = KMeans::new(
-                &split.iter().flatten().copied().collect::<Vec<f32>>(),
-                self.references.len(),
-                self.config.subvector_size.try_into().unwrap(),
-                EuclideanDistance,
-            );
+            let flat_data: Vec<f32> = split.iter().flatten().copied().collect();
 
-            let max_iter = 100000;
-            let result = kmeans.kmeans_lloyd(
-                self.config.num_centroids.into(),
-                max_iter,
-                KMeans::init_kmeanplusplus,
-                &KMeansConfig::default(),
-            );
+            let data = ndarray::Array2::from_shape_vec(
+                (self.references.len(), self.config.subvector_size as usize),
+                flat_data,
+            )
+            .expect("Failed to create ndarray from subvectors");
 
-            let num_centroids = self.config.num_centroids as usize;
+            // Always train with euclidean because if we normalize subvectors (needed for spherical)
+            // we would lose the ability to compute dot product and the relative strength to the overall vector
+            let mut kmeans = kentro::KMeans::new(self.config.num_centroids)
+                .with_iterations(kmeans_iter)
+                .with_euclidean(true);
 
-            let centroids: Vec<Vec<f32>> = (0..num_centroids)
-                .map(|i| {
-                    let centroid_slice = &result.centroids[i];
-                    centroid_slice.to_vec()
-                })
+            kmeans
+                .train(data.view(), None)
+                .expect("KMeans training failed");
+
+            let centroids: Vec<Vec<f32>> = kmeans
+                .centroids()
+                .expect("Centroids not found after training")
+                .outer_iter()
+                .map(|row| row.to_vec())
                 .collect();
 
             self.codebooks.push(centroids);
@@ -114,13 +113,29 @@ impl<'a> AsymmetricHashingEngine<'a> {
     }
 
     fn find_codebook_index(&mut self, vec: Vector, subspace: usize) -> usize {
+        let is_similarity = match self.config.distance {
+            Distance::DotProductRaw | Distance::Cosine => true,
+            Distance::L2Norm | Distance::L1Norm => false,
+        };
+
         let mut idx: usize = std::usize::MAX;
-        let mut distance = std::f32::MAX;
+        let mut best_score = if is_similarity {
+            std::f32::MIN
+        } else {
+            std::f32::MAX
+        };
 
         for (eid, centroid) in self.codebooks[subspace].clone().into_iter().enumerate() {
-            let current_distance = self.config.distance.compute(&vec, &centroid);
-            if current_distance < distance {
-                distance = current_distance;
+            let current_score = self.config.distance.compute(&vec, &centroid);
+
+            let is_better = if is_similarity {
+                current_score > best_score
+            } else {
+                current_score < best_score
+            };
+
+            if is_better {
+                best_score = current_score;
                 idx = eid;
             }
         }
@@ -231,25 +246,38 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             .iter()
             .enumerate()
             .map(|(idx, vec)| {
-                let mut current_distance = 0f32;
+                let mut current_score = 0f32;
                 for (subspace, centroid_idx) in vec.iter().enumerate() {
-                    current_distance += lut[subspace][*centroid_idx];
+                    current_score += lut[subspace][*centroid_idx];
                 }
-                (idx, current_distance)
+                (idx, current_score)
             })
             .collect();
 
+        let is_similarity = match self.config.distance {
+            Distance::DotProductRaw | Distance::Cosine => true,
+            Distance::L2Norm | Distance::L1Norm => false,
+        };
+
         let (top_k_slice, _, _) = scores.select_nth_unstable_by(k - 1, |a, b| {
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+            if is_similarity {
+                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+            } else {
+                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+            }
         });
 
-        top_k_slice.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        top_k_slice.sort_by(|a, b| {
+            if is_similarity {
+                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+            } else {
+                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+            }
+        });
+
         top_k_slice
             .iter()
-            .map(|&(idx, score)| CandidateScore {
-                index: idx,
-                score,
-            })
+            .map(|&(idx, score)| CandidateScore { index: idx, score })
             .collect()
     }
 }

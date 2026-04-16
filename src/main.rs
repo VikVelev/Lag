@@ -171,7 +171,7 @@ fn quality_eval() {
         let bf_results = brute_force_engine.search(&query, top_k);
 
         for (top_i, (a, b)) in ah_results.into_iter().zip(bf_results).enumerate() {
-            println!("#{} AH result: {:?} \nBF result: {:?}\n", top_i, a, b);
+            println!("#{} AH result: {:?} \n#{} BF result: {:?}\n", top_i, a, top_i, b);
         }
     }
 
