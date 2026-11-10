@@ -58,6 +58,8 @@ fn main_asymmetric() {
         centroid_computer: engine::engine::CentroidComputerType::KMeans,
         vector_size: vector_dims,
         subvector_size: 4,
+        training_sample: 0,
+        kmeans_iterations: 300,
     };
     let mut engine: AsymmetricHashingEngine =
         AsymmetricHashingEngine::new(&references, assymetric_config);
@@ -121,6 +123,8 @@ fn quality_eval() {
         centroid_computer: engine::engine::CentroidComputerType::KMeans,
         vector_size: vector_dims,
         subvector_size: 4,
+        training_sample: 0,
+        kmeans_iterations: 300,
     };
     let mut engine: AsymmetricHashingEngine =
         AsymmetricHashingEngine::new(&references, assymetric_config);

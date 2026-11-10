@@ -17,6 +17,11 @@ pub struct AsymmetricConfig {
     pub vector_size: i32,
     // size of chunked vectors - multiple of vector_size
     pub subvector_size: i32,
+
+    // how many reference vectors to train k-means on, 0 means all of them
+    pub training_sample: usize,
+    // k-means iterations for each codebook
+    pub kmeans_iterations: usize,
 }
 
 pub struct AsymmetricHashingEngine<'a> {
@@ -49,53 +54,43 @@ impl<'a> AsymmetricHashingEngine<'a> {
             panic!();
         }
 
-        // A storage for each # subvector - an array of subvectors
-        let mut temp_subvector_split = Vec::<Vec<Vec<f32>>>::new();
-        let num_subvectors = self.config.vector_size / self.config.subvector_size;
-        let kmeans_iter = 300;
+        let num_subvectors = (self.config.vector_size / self.config.subvector_size) as usize;
+        let subvector_size = self.config.subvector_size as usize;
 
-        for _ in 0..num_subvectors {
-            temp_subvector_split.push(Vec::<Vec<f32>>::new());
+        // Training k-means on every vector gets way too slow (and memory hungry) for big indexes,
+        // so train on an evenly spaced sample instead
+        let num_references = self.references.len();
+        let mut sample_size = num_references;
+        if self.config.training_sample > 0 && self.config.training_sample < num_references {
+            sample_size = self.config.training_sample;
         }
+        let sample_rows: Vec<usize> = (0..sample_size)
+            .map(|i| i * num_references / sample_size)
+            .collect();
 
         println!(
-            "Splitting {} reference vectors into {} subvector groups...",
-            self.references.len(),
-            num_subvectors
+            "Training {} codebooks on {}/{} reference vectors...",
+            num_subvectors, sample_size, num_references
         );
 
-        // Split reference vectors into subvectors
-        for (idx, vec) in self.references.iter().enumerate() {
-            if idx % 100000 == 0 && idx > 0 {
-                println!("  Processed {}/{} vectors", idx, self.references.len());
-            }
-            for i in 0..num_subvectors {
-                let start = (i * self.config.subvector_size) as usize;
-                let end = ((i + 1) * self.config.subvector_size) as usize;
-                temp_subvector_split
-                    .get_mut(i as usize)
-                    .unwrap()
-                    .push(vec[start..end].to_vec());
-            }
-        }
-
-        println!("Entering KMeans training phase for each subvector group.");
-
-        for (i, split) in temp_subvector_split.into_iter().enumerate() {
+        for i in 0..num_subvectors {
             println!("  Training codebook {}/{}...", i + 1, num_subvectors);
 
-            let flat_data: Vec<f32> = split.iter().flatten().copied().collect();
+            let start = i * subvector_size;
+            let end = (i + 1) * subvector_size;
 
-            let data = ndarray::Array2::from_shape_vec(
-                (self.references.len(), self.config.subvector_size as usize),
-                flat_data,
-            )
-            .expect("Failed to create ndarray from subvectors");
+            let mut flat_data: Vec<f32> = Vec::with_capacity(sample_size * subvector_size);
+            for &row in sample_rows.iter() {
+                flat_data.extend_from_slice(&self.references[row][start..end]);
+            }
+
+            let data = ndarray::Array2::from_shape_vec((sample_size, subvector_size), flat_data)
+                .expect("Failed to create ndarray from subvectors");
 
             // Always train with euclidean because if we normalize subvectors (needed for spherical)
             // we would lose the ability to compute dot product and the relative strength to the overall vector
             let mut kmeans = kentro::KMeans::new(self.config.num_centroids)
-                .with_iterations(kmeans_iter)
+                .with_iterations(self.config.kmeans_iterations)
                 .with_euclidean(true);
 
             kmeans
@@ -179,25 +174,24 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
 
         self.build_codebook();
 
-        let num_subvectors = self.config.vector_size / self.config.subvector_size;
+        let num_subvectors = (self.config.vector_size / self.config.subvector_size) as usize;
+        let subvector_size = self.config.subvector_size as usize;
 
         println!("Hashing Vectors...");
-        for (idx, vec) in self.references.iter().enumerate() {
-            if idx % 100000 == 0 && idx > 0 {
-                println!("  Processed {}/{} vectors", idx, self.references.len());
-            }
-
-            let mut hashed_vector = vec![0u8; num_subvectors as usize];
-
-            for i in 0..num_subvectors {
-                let start = (i * self.config.subvector_size) as usize;
-                let end = ((i + 1) * self.config.subvector_size) as usize;
-                let closest_centroid_idx =
-                    self.find_codebook_index(&vec[start..end], i.try_into().unwrap());
-                hashed_vector[i as usize] = closest_centroid_idx as u8;
-            }
-            self.hashed_references.push(hashed_vector);
-        }
+        // Every vector is hashed on its own, so this is trivially parallel
+        self.hashed_references = self
+            .references
+            .par_iter()
+            .map(|vec| {
+                let mut hashed_vector = vec![0u8; num_subvectors];
+                for i in 0..num_subvectors {
+                    let start = i * subvector_size;
+                    let end = (i + 1) * subvector_size;
+                    hashed_vector[i] = self.find_codebook_index(&vec[start..end], i) as u8;
+                }
+                hashed_vector
+            })
+            .collect();
 
         let hashed_bytes = (self.hashed_references.capacity() * std::mem::size_of::<Vec<u8>>())
             + self
