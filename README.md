@@ -37,15 +37,22 @@ Asymmetric Hashing uses 255 centroids per subspace, with k-means trained for 25 
 | Asymmetric Hashing (4-d, 384 B/vector, mean-centered) | 386.71 MB | 106.5s  | 24.378s                | 41.0 | 0.7990   | 0.8398    | 0.8607     |
 | Asymmetric Hashing (8-d, 192 B/vector) | 205.43 MB          | 67.4s      | 12.093s                | 82.7 | 0.6880   | 0.7211    | 0.7364     |
 | Asymmetric Hashing (8-d, 192 B/vector, mean-centered) | 205.43 MB | 67.9s   | 12.464s                | 80.2 | 0.6850   | 0.7224    | 0.7353     |
+| Asymmetric Hashing (4-d, 384 B/vector, rerank top 1000) | 386.70 MB* | 105.0s | 24.879s               | 40.2 | 1.0000   | 1.0000    | 1.0000     |
+| Asymmetric Hashing (8-d, 192 B/vector, rerank top 1000) | 205.43 MB* | 68.2s  | 13.829s               | 72.3 | 1.0000   | 1.0000    | 0.9986     |
+| Asymmetric Hashing (8-d, 192 B/vector, rerank top 200)  | 205.43 MB* | 67.7s  | 12.801s               | 78.1 | 1.0000   | 0.9991    | 0.9242     |
 | HNSW                                   | TODO               | TODO       | TODO                   | TODO | TODO     | TODO      | TODO       |
 
 AH is 8-15x faster and 15-28x smaller, but recall takes a big hit. ada-002 embeddings are packed really tightly - the median gap between the 10th and 11th neighbour is ~0.001, while AH's scoring error is around 0.01, so neighbours near the cut-off get shuffled around.
 
 Mean centering (hashing `x - mean` instead of `x`) was an attempt to fix that, since ada-002 vectors all point roughly the same way (a random pair has ~0.69 similarity). It didn't help at all - in hindsight k-means doesn't care about a constant shift, the centroids just move along with the data and the quantization error stays exactly the same.
 
+What does work is reranking: use the hashed scores only to pick a shortlist of the best M candidates, then score just those M again with the full vectors. The true neighbours are almost always somewhere in the shortlist, so recall goes back to ~1.0, and scoring 1,000 extra vectors per query is nothing compared to scanning all the hashed ones.
+
+\* Reranking needs the full vectors as well. Right now they're kept in RAM (5823.44 MB here, same as brute force) - the memory column only counts the hashed index. Since a query only ever looks at M of them they could live on disk instead, but that's not implemented.
+
 To reproduce:
 
 ```bash
 src/eval/download_eval_data.sh
-cargo run --release -- eval --engines bf,ah4,ah4c,ah8,ah8c --queries 1000
+cargo run --release -- eval --engines bf,ah4,ah4c,ah8,ah8c,ah4r1000,ah8r1000,ah8r200 --queries 1000
 ```

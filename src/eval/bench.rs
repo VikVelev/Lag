@@ -7,6 +7,7 @@
 //   bf  - brute force
 //   ahN - asymmetric hashing with N-dimensional subvectors (1536 / N bytes per vector)
 //   add c for mean centering, e.g. ah8c
+//   add rM to rerank the best M candidates with the full vectors, e.g. ah8r1000 or ah8cr1000
 //
 // Other flags: --train-sample 100000, --kmeans-iters 25, --data datasets/dbpedia-openai-1M
 
@@ -189,11 +190,18 @@ pub fn run(args: &[String]) {
             let mut engine = BruteForceEngine::new(&references, Distance::DotProductRaw);
             results.push(evaluate("Brute Force", &mut engine, &queries, &ground_truth));
         } else if let Some(ah_options) = engine_name.strip_prefix("ah") {
+            let mut ah_options = ah_options;
+            let mut rerank = 0;
+            if let Some((rest, rerank_size)) = ah_options.split_once('r') {
+                ah_options = rest;
+                rerank = rerank_size.parse().expect("Rerank size has to be a number, e.g. ah8r1000");
+            }
+
             let mean_center = ah_options.ends_with('c');
             let subvector_size: i32 = ah_options
                 .trim_end_matches('c')
                 .parse()
-                .expect("Asymmetric hashing engines look like ah8 or ah8c");
+                .expect("Asymmetric hashing engines look like ah8, ah8c or ah8r1000");
             assert!(
                 vector_dims % subvector_size == 0,
                 "subvector size has to divide the vector size"
@@ -208,6 +216,7 @@ pub fn run(args: &[String]) {
                 training_sample: options.training_sample,
                 kmeans_iterations: options.kmeans_iterations,
                 mean_center,
+                rerank,
             };
             let mut engine = AsymmetricHashingEngine::new(&references, assymetric_config);
             let mut name = format!(
@@ -218,10 +227,13 @@ pub fn run(args: &[String]) {
             if mean_center {
                 name.push_str(", mean-centered");
             }
+            if rerank > 0 {
+                name.push_str(&format!(", rerank top {}", rerank));
+            }
             name.push(')');
             results.push(evaluate(&name, &mut engine, &queries, &ground_truth));
         } else {
-            panic!("Unknown engine {} - use bf, ahN or ahNc", engine_name);
+            panic!("Unknown engine {} - use bf, ahN, ahNc or ahNrM", engine_name);
         }
     }
 

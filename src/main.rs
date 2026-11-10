@@ -62,6 +62,7 @@ fn main_asymmetric() {
         training_sample: 0,
         kmeans_iterations: 300,
         mean_center: false,
+        rerank: 0,
     };
     let mut engine: AsymmetricHashingEngine =
         AsymmetricHashingEngine::new(&references, assymetric_config);
@@ -128,6 +129,7 @@ fn quality_eval() {
         training_sample: 0,
         kmeans_iterations: 300,
         mean_center: false,
+        rerank: 0,
     };
     let mut engine: AsymmetricHashingEngine =
         AsymmetricHashingEngine::new(&references, assymetric_config);

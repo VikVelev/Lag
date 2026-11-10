@@ -26,6 +26,25 @@ pub struct AsymmetricConfig {
     // subtract the mean of all references before hashing - only for DotProductRaw,
     // since q·x = q·(x - mean) + q·mean and q·mean is the same for every reference
     pub mean_center: bool,
+
+    // how many of the best hashed candidates to score again with the full vectors, 0 means no reranking
+    pub rerank: usize,
+}
+
+// Keeps only the best k scores, sorted from best to worst
+fn keep_top_k(scores: &mut Vec<(usize, f32)>, k: usize, is_similarity: bool) {
+    let compare = |a: &(usize, f32), b: &(usize, f32)| {
+        if is_similarity {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        } else {
+            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+        }
+    };
+
+    // select_nth leaves the k-th best at index k - 1, so the top k is everything up to and including it
+    scores.select_nth_unstable_by(k - 1, compare);
+    scores.truncate(k);
+    scores.sort_by(compare);
 }
 
 pub struct AsymmetricHashingEngine<'a> {
@@ -292,6 +311,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
     // Compute a Look-up table
     // Use it to go over the compressed references
     // Top_k is actually O(n + klogk) with select_nth_unstable
+    // Optionally rerank the best candidates with the full vectors
     fn search(&self, query: &Vector, top_k: usize) -> Vec<CandidateScore> {
         if top_k == 0 || self.hashed_references.is_empty() {
             return vec![];
@@ -324,25 +344,26 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             Distance::L2Norm | Distance::L1Norm => false,
         };
 
-        scores.select_nth_unstable_by(k - 1, |a, b| {
-            if is_similarity {
-                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-            } else {
-                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-            }
-        });
+        if self.config.rerank == 0 {
+            keep_top_k(&mut scores, k, is_similarity);
+        } else {
+            // Reranking
+            // Use the hashed scores only to pick a shortlist of candidates
+            // Score the shortlist again with the full vectors and keep the best top_k of those
+            let shortlist_size = std::cmp::min(std::cmp::max(self.config.rerank, k), scores.len());
+            keep_top_k(&mut scores, shortlist_size, is_similarity);
 
-        // select_nth leaves the k-th best at index k - 1, so the top k is everything up to and including it
-        let top_k_slice = &mut scores[..k];
-        top_k_slice.sort_by(|a, b| {
-            if is_similarity {
-                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-            } else {
-                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+            for candidate in scores.iter_mut() {
+                candidate.1 = self
+                    .config
+                    .distance
+                    .compute(query, &self.references[candidate.0]);
             }
-        });
 
-        top_k_slice
+            keep_top_k(&mut scores, k, is_similarity);
+        }
+
+        scores
             .iter()
             .map(|&(idx, score)| CandidateScore { index: idx, score })
             .collect()
