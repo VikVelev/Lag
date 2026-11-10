@@ -34,14 +34,18 @@ Asymmetric Hashing uses 255 centroids per subspace, with k-means trained for 25 
 | -------------------------------------- | ------------------ | ---------- | ---------------------- | ---- | -------- | --------- | ---------- |
 | Brute Force                            | 5823.44 MB         | -          | 183.698s               | 5.4  | 1.0000   | 1.0000    | 1.0000     |
 | Asymmetric Hashing (4-d, 384 B/vector) | 386.70 MB          | 105.9s     | 24.175s                | 41.4 | 0.8170   | 0.8419    | 0.8610     |
+| Asymmetric Hashing (4-d, 384 B/vector, mean-centered) | 386.71 MB | 106.5s  | 24.378s                | 41.0 | 0.7990   | 0.8398    | 0.8607     |
 | Asymmetric Hashing (8-d, 192 B/vector) | 205.43 MB          | 67.4s      | 12.093s                | 82.7 | 0.6880   | 0.7211    | 0.7364     |
+| Asymmetric Hashing (8-d, 192 B/vector, mean-centered) | 205.43 MB | 67.9s   | 12.464s                | 80.2 | 0.6850   | 0.7224    | 0.7353     |
 | HNSW                                   | TODO               | TODO       | TODO                   | TODO | TODO     | TODO      | TODO       |
 
 AH is 8-15x faster and 15-28x smaller, but recall takes a big hit. ada-002 embeddings are packed really tightly - the median gap between the 10th and 11th neighbour is ~0.001, while AH's scoring error is around 0.01, so neighbours near the cut-off get shuffled around.
+
+Mean centering (hashing `x - mean` instead of `x`) was an attempt to fix that, since ada-002 vectors all point roughly the same way (a random pair has ~0.69 similarity). It didn't help at all - in hindsight k-means doesn't care about a constant shift, the centroids just move along with the data and the quantization error stays exactly the same.
 
 To reproduce:
 
 ```bash
 src/eval/download_eval_data.sh
-cargo run --release -- eval --engines bf,ah4,ah8 --queries 1000
+cargo run --release -- eval --engines bf,ah4,ah4c,ah8,ah8c --queries 1000
 ```

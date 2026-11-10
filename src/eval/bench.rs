@@ -6,6 +6,7 @@
 // Engines:
 //   bf  - brute force
 //   ahN - asymmetric hashing with N-dimensional subvectors (1536 / N bytes per vector)
+//   add c for mean centering, e.g. ah8c
 //
 // Other flags: --train-sample 100000, --kmeans-iters 25, --data datasets/dbpedia-openai-1M
 
@@ -187,10 +188,12 @@ pub fn run(args: &[String]) {
         if engine_name == "bf" {
             let mut engine = BruteForceEngine::new(&references, Distance::DotProductRaw);
             results.push(evaluate("Brute Force", &mut engine, &queries, &ground_truth));
-        } else if let Some(subvector_size) = engine_name.strip_prefix("ah") {
-            let subvector_size: i32 = subvector_size
+        } else if let Some(ah_options) = engine_name.strip_prefix("ah") {
+            let mean_center = ah_options.ends_with('c');
+            let subvector_size: i32 = ah_options
+                .trim_end_matches('c')
                 .parse()
-                .expect("Asymmetric hashing engines look like ah8");
+                .expect("Asymmetric hashing engines look like ah8 or ah8c");
             assert!(
                 vector_dims % subvector_size == 0,
                 "subvector size has to divide the vector size"
@@ -204,16 +207,21 @@ pub fn run(args: &[String]) {
                 subvector_size,
                 training_sample: options.training_sample,
                 kmeans_iterations: options.kmeans_iterations,
+                mean_center,
             };
             let mut engine = AsymmetricHashingEngine::new(&references, assymetric_config);
-            let name = format!(
-                "Asymmetric Hashing ({}-d, {} B/vector)",
+            let mut name = format!(
+                "Asymmetric Hashing ({}-d, {} B/vector",
                 subvector_size,
                 vector_dims / subvector_size
             );
+            if mean_center {
+                name.push_str(", mean-centered");
+            }
+            name.push(')');
             results.push(evaluate(&name, &mut engine, &queries, &ground_truth));
         } else {
-            panic!("Unknown engine {} - use bf or ahN", engine_name);
+            panic!("Unknown engine {} - use bf, ahN or ahNc", engine_name);
         }
     }
 

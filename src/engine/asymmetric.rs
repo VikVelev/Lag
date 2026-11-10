@@ -22,6 +22,10 @@ pub struct AsymmetricConfig {
     pub training_sample: usize,
     // k-means iterations for each codebook
     pub kmeans_iterations: usize,
+
+    // subtract the mean of all references before hashing - only for DotProductRaw,
+    // since q·x = q·(x - mean) + q·mean and q·mean is the same for every reference
+    pub mean_center: bool,
 }
 
 pub struct AsymmetricHashingEngine<'a> {
@@ -30,6 +34,8 @@ pub struct AsymmetricHashingEngine<'a> {
     // for every sub-vector, all learned centroids
     codebooks: Vec<Vec<Vector>>,
     hashed_references: Vec<HashedVector>,
+    // only set when mean_center is on
+    mean: Option<Vector>,
 }
 
 impl<'a> AsymmetricHashingEngine<'a> {
@@ -45,7 +51,29 @@ impl<'a> AsymmetricHashingEngine<'a> {
             config,
             codebooks,
             hashed_references,
+            mean: None,
         };
+    }
+
+    fn compute_mean(&self) -> Vector {
+        // sum in f64, a million f32 additions lose too much precision
+        let mut sum = vec![0f64; self.config.vector_size as usize];
+        for vec in self.references.iter() {
+            for (total, x) in sum.iter_mut().zip(vec.iter()) {
+                *total += *x as f64;
+            }
+        }
+
+        let num_references = self.references.len() as f64;
+        return sum.iter().map(|total| (total / num_references) as f32).collect();
+    }
+
+    // The vector that actually gets hashed - centered if mean_center is on
+    fn centered(&self, vec: &[f32]) -> Vector {
+        match &self.mean {
+            Some(mean) => vec.iter().zip(mean.iter()).map(|(x, m)| x - m).collect(),
+            None => vec.to_vec(),
+        }
     }
 
     fn build_codebook(&mut self) {
@@ -81,7 +109,15 @@ impl<'a> AsymmetricHashingEngine<'a> {
 
             let mut flat_data: Vec<f32> = Vec::with_capacity(sample_size * subvector_size);
             for &row in sample_rows.iter() {
-                flat_data.extend_from_slice(&self.references[row][start..end]);
+                let subvector = &self.references[row][start..end];
+                match &self.mean {
+                    Some(mean) => {
+                        for (x, m) in subvector.iter().zip(mean[start..end].iter()) {
+                            flat_data.push(x - m);
+                        }
+                    }
+                    None => flat_data.extend_from_slice(subvector),
+                }
             }
 
             let data = ndarray::Array2::from_shape_vec((sample_size, subvector_size), flat_data)
@@ -172,6 +208,14 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             self.references.len()
         );
 
+        if self.config.mean_center {
+            if !matches!(self.config.distance, Distance::DotProductRaw) {
+                panic!("Mean centering only keeps the ranking the same for DotProductRaw");
+            }
+            println!("Computing the mean of the references...");
+            self.mean = Some(self.compute_mean());
+        }
+
         self.build_codebook();
 
         let num_subvectors = (self.config.vector_size / self.config.subvector_size) as usize;
@@ -183,6 +227,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             .references
             .par_iter()
             .map(|vec| {
+                let vec = self.centered(vec);
                 let mut hashed_vector = vec![0u8; num_subvectors];
                 for i in 0..num_subvectors {
                     let start = i * subvector_size;
@@ -230,7 +275,12 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             .map(|centroid| centroid.capacity() * std::mem::size_of::<f32>())
             .sum::<usize>();
 
-        return hashed_bytes + codebook_bytes;
+        let mean_bytes = match &self.mean {
+            Some(mean) => mean.capacity() * std::mem::size_of::<f32>(),
+            None => 0,
+        };
+
+        return hashed_bytes + codebook_bytes + mean_bytes;
     }
 
     // TODO: Implement
@@ -250,13 +300,18 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
 
         let lut = self.create_lut(query);
         let num_centroids = self.config.num_centroids;
+        // when centering, the lut gives q·(x - mean) - add q·mean back so the scores are still q·x
+        let mut offset = 0f32;
+        if let Some(mean) = &self.mean {
+            offset = self.config.distance.compute(query, mean);
+        }
 
         let mut scores: Vec<(usize, f32)> = self
             .hashed_references
             .par_iter()
             .enumerate()
             .map(|(idx, vec)| {
-                let mut current_score = 0f32;
+                let mut current_score = offset;
                 for (subspace, centroid_idx) in vec.iter().enumerate() {
                     current_score += lut[subspace * num_centroids + (*centroid_idx as usize)];
                 }
