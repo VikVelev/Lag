@@ -35,7 +35,9 @@ pub trait VSEngine: Sync {
     fn build(&mut self);
     fn amend(&self, vec: Vector);
     fn search(&self, query: &Vector, top_k: usize) -> Vec<CandidateScore>;
-    
+    // how much memory the index that gets searched takes, in bytes
+    fn index_memory_bytes(&self) -> usize;
+
     fn search_batch(&self, queries: &[Vector], top_k: usize) -> Vec<Vec<CandidateScore>> {
         queries.iter().map(|q| self.search(q, top_k)).collect()
     }

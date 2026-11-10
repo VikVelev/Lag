@@ -28,6 +28,15 @@ impl<'a> VSEngine for BruteForceEngine<'a> {
         panic!();
     }
 
+    fn index_memory_bytes(&self) -> usize {
+        return (self.references.capacity() * std::mem::size_of::<Vec<f32>>())
+            + self
+                .references
+                .iter()
+                .map(|v| v.capacity() * std::mem::size_of::<f32>())
+                .sum::<usize>();
+    }
+
     // Almost the dummest algorithm possible:
     // Compute distance to each vector - store them in an array
     // Compute cut-off and get the top_k

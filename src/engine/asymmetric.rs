@@ -215,6 +215,24 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
         );
     }
 
+    fn index_memory_bytes(&self) -> usize {
+        let hashed_bytes = (self.hashed_references.capacity() * std::mem::size_of::<Vec<u8>>())
+            + self
+                .hashed_references
+                .iter()
+                .map(|v| v.capacity() * std::mem::size_of::<u8>())
+                .sum::<usize>();
+        // the codebooks are needed at query time too, for the look-up table
+        let codebook_bytes = self
+            .codebooks
+            .iter()
+            .flatten()
+            .map(|centroid| centroid.capacity() * std::mem::size_of::<f32>())
+            .sum::<usize>();
+
+        return hashed_bytes + codebook_bytes;
+    }
+
     // TODO: Implement
     fn amend(&self, _vec: Vector) {
         panic!();
