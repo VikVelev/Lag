@@ -257,7 +257,7 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             Distance::L2Norm | Distance::L1Norm => false,
         };
 
-        let (top_k_slice, _, _) = scores.select_nth_unstable_by(k - 1, |a, b| {
+        scores.select_nth_unstable_by(k - 1, |a, b| {
             if is_similarity {
                 b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
             } else {
@@ -265,6 +265,8 @@ impl<'a> VSEngine for AsymmetricHashingEngine<'a> {
             }
         });
 
+        // select_nth leaves the k-th best at index k - 1, so the top k is everything up to and including it
+        let top_k_slice = &mut scores[..k];
         top_k_slice.sort_by(|a, b| {
             if is_similarity {
                 b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
