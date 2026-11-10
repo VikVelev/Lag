@@ -26,8 +26,22 @@ else
 fi
 
 mkdir -p "$DBPEDIA_DIR"
-echo "Downloading $DBPEDIA_REPO -> $DBPEDIA_DIR (~9 GB)"
+echo "Downloading $DBPEDIA_REPO -> $DBPEDIA_DIR (~9 GB, ~15 GB after preparing)"
 "${HF[@]}" download "$DBPEDIA_REPO" --repo-type dataset --local-dir "$DBPEDIA_DIR"
+
+# Convert to flat binary files + exact ground truth, used by `cargo run --release -- eval`.
+# gt.ibin is written last, so if it exists the conversion already finished.
+if [[ -f "$DBPEDIA_DIR/gt.ibin" ]]; then
+    echo "Eval files already prepared, delete $DBPEDIA_DIR/gt.ibin to redo them."
+else
+    PREPARE="$REPO_ROOT/src/eval/prepare_dbpedia.py"
+    if command -v uv >/dev/null 2>&1; then
+        uv run --no-project --with numpy --with pyarrow python -I "$PREPARE" "$DBPEDIA_DIR"
+    else
+        # needs numpy and pyarrow installed
+        python3 -I "$PREPARE" "$DBPEDIA_DIR"
+    fi
+fi
 
 echo "Done."
 du -sh "$DBPEDIA_DIR"
