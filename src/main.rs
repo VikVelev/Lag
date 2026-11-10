@@ -1,4 +1,5 @@
 mod engine;
+mod eval;
 mod vector;
 
 use std::{
@@ -175,7 +176,9 @@ fn quality_eval() {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.contains(&String::from("-a")) {
+    if args.len() > 1 && args[1] == "eval" {
+        eval::bench::run(&args[2..]);
+    } else if args.contains(&String::from("-a")) {
         main_asymmetric();
     } else if args.contains(&String::from("-b")) {
         main_bruteforce();
